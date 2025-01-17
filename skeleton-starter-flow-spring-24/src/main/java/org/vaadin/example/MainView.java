@@ -1,60 +1,89 @@
 package org.vaadin.example;
 
-import com.vaadin.flow.component.Key;
+import java.util.List;
+
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.button.ButtonVariant;
-import com.vaadin.flow.component.html.Paragraph;
+import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.Grid.SelectionMode;
+import com.vaadin.flow.component.notification.Notification;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.Route;
-import org.springframework.beans.factory.annotation.Autowired;
 
-/**
- * A sample Vaadin view class.
- * <p>
- * To implement a Vaadin view just extend any Vaadin component and use @Route
- * annotation to announce it in a URL as a Spring managed bean.
- * <p>
- * A new instance of this class is created for every new user and every browser
- * tab/window.
- * <p>
- * The main view contains a text field for getting the user name and a button
- * that shows a greeting message in a notification.
- */
-@Route
+@Route("")
 public class MainView extends VerticalLayout {
 
-    /**
-     * Construct a new Vaadin view.
-     * <p>
-     * Build the initial UI state for the user accessing the application.
-     *
-     * @param service
-     *            The message service. Automatically injected Spring managed bean.
-     */
-    public MainView(@Autowired GreetService service) {
+    private final DataService dataService;
+    private final Grid<House> grid;
+    private final TextField addressField;
+    private final TextField ownerField;
+    private final TextField valueField;
+    private final TextField squareMetresField;
+    private final Button saveButton;
 
-        // Use TextField for standard text input
-        TextField textField = new TextField("Your name");
-        textField.addClassName("bordered");
+    public MainView() {
+        this.dataService = new DataService();
+        this.grid = new Grid<>(House.class, false);
 
-        // Button click listeners can be defined as lambda expressions
-        Button button = new Button("Say hello", e -> {
-            add(new Paragraph(service.greet(textField.getValue())));
+        // Configuración del Grid
+        grid.addColumn(House::getAddress).setHeader("Address");
+        grid.addColumn(House::getOwner).setHeader("Owner");
+        grid.addColumn(House::getValue).setHeader("Value");
+        grid.addColumn(House::getSquareMetres).setHeader("Square Metres");
+        grid.setSelectionMode(SelectionMode.SINGLE);
+
+        grid.addComponentColumn(house -> {
+            Button generateCsvButton = new Button("Generate CSV");
+            generateCsvButton.addClickListener(e -> dataService.generateCsv(house.getId()));
+            return generateCsvButton;
+        }).setHeader("Actions");
+
+        grid.addSelectionListener(e -> {
+            e.getFirstSelectedItem().ifPresent(this::populateForm);
         });
 
-        // Theme variants give you predefined extra styles for components.
-        // Example: Primary button has a more prominent look.
-        button.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        // Campos del formulario
+        addressField = new TextField("Address");
+        ownerField = new TextField("Owner");
+        valueField = new TextField("Value");
+        squareMetresField = new TextField("Square Metres");
 
-        // You can specify keyboard shortcuts for buttons.
-        // Example: Pressing enter in this view clicks the Button.
-        button.addClickShortcut(Key.ENTER);
+        saveButton = new Button("Save", e -> saveHouse());
 
-        // Use custom CSS classes to apply styling. This is defined in
-        // styles.css.
-        addClassName("centered-content");
+        HorizontalLayout formLayout = new HorizontalLayout(addressField, ownerField, valueField, squareMetresField, saveButton);
 
-        add(textField, button);
+        Button exportPdfButton = new Button("Export PDF", e -> dataService.exportPdf());
+
+        add(grid, formLayout, exportPdfButton);
+        refreshGrid();
+    }
+
+    private void refreshGrid() {
+        List<House> houses = dataService.getAllHouses();
+        grid.setItems(houses);
+    }
+
+    private void populateForm(House house) {
+        addressField.setValue(house.getAddress());
+        ownerField.setValue(house.getOwner());
+        valueField.setValue(String.valueOf(house.getValue()));
+        squareMetresField.setValue(String.valueOf(house.getSquareMetres()));
+    }
+
+    private void saveHouse() {
+        try {
+            House house = new House();
+            house.setAddress(addressField.getValue());
+            house.setOwner(ownerField.getValue());
+            house.setValue(Double.parseDouble(valueField.getValue()));
+            house.setSquareMetres(Integer.parseInt(squareMetresField.getValue()));
+
+            dataService.addHouse(house);
+            refreshGrid();
+        } catch (Exception e) {
+            Notification.show("Error saving house: " + e.getMessage(), 3000, Notification.Position.MIDDLE);
+        }
     }
 }
+
